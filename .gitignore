@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+artifacts/
+
+# Durable public submission metadata and process lock.
+data/
+
+
+public/vendor/
+.vercel/

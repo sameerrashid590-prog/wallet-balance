@@ -1,0 +1,23 @@
+{
+  "name": "etherreceipt",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Public ETH and USDC payments approved in a connected wallet, with receipt verification",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env server.js",
+    "start": "node --env-file-if-exists=.env server.js",
+    "test": "node --test",
+    "check": "node scripts/check.js",
+    "check:live": "node --env-file-if-exists=.env scripts/live-check.js",
+    "check:send-rpc": "node --env-file-if-exists=.env scripts/check-sender-rpc.js",
+    "check:usdc": "node --env-file-if-exists=.env scripts/check-usdc-live.js",
+    "build": "node scripts/build.js"
+  },
+  "dependencies": {
+    "ethers": "6.17.0"
+  }
+}

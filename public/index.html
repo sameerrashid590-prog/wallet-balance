@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#174c3c">
+  <meta name="description" content="Understand wallet activity and check freelance ETH payments across Ethereum Mainnet, Sepolia, and Hoodi. Ethereum payment verification and transfers approved in your connected wallet.">
+  <title>EtherReceipt · Know your payment landed</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23174c3c'/%3E%3Ctext x='10' y='29' font-size='28' fill='white'%3EE%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="importmap">{"imports":{"ethers":"/vendor/ethers.js"}}</script>
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to payment tools</a>
+  <header class="site-header shell">
+    <a href="/" class="brand" aria-label="EtherReceipt home"><span class="brand-icon" aria-hidden="true">E<span>✓</span></span>EtherReceipt<span class="beta">LEARN</span></a>
+    <span class="network"><span class="dot"></span><span id="network-current">Ethereum Mainnet</span> <span class="network-id" id="network-chain-id">/ 1</span></span>
+  </header>
+  <main id="main" class="shell">
+    <section class="hero" aria-labelledby="hero-title">
+      <div><p class="eyebrow"><span class="tiny-line"></span>A LITTLE CLARITY, ON CHAIN</p>
+      <h1 id="hero-title">Good work deserves<br>a <span>clear receipt.</span></h1>
+      <p class="hero-copy">Check the payment. Understand the activity.<br>Your workspace for ETH and USDC payments.</p></div>
+      <div class="mode-box"><fieldset class="mode-switch"><legend class="sr-only">Data source</legend>
+        <label><input type="radio" name="mode" value="demo"><span>◈ &nbsp; Demo</span></label>
+        <label><input type="radio" name="mode" value="live" checked><span><i class="dot"></i> Live</span></label>
+      </fieldset><p id="mode-caption">Live Ethereum tools.</p></div>
+    </section>
+    <div class="network-control"><div><label for="network-select">Ethereum network</label><p>Choose where to look. Balances and transaction histories are separate on each network.</p></div><select id="network-select"><option value="mainnet" selected>Ethereum Mainnet · Real ETH</option><option value="sepolia">Sepolia · Test ETH</option><option value="hoodi">Hoodi · Test ETH</option></select></div>
+    <div class="network-control"><div><label for="asset-select">Payment asset</label><p>Use the same wallet for ETH and USDC. Network fees are paid in ETH.</p></div><select id="asset-select"><option value="ETH">ETH (Ethereum)</option><option value="USDC">USDC (USD Coin)</option></select></div>
+    <div id="mode-banner" class="mode-banner live"><span class="banner-icon" aria-hidden="true">◉</span><p><strong>Ethereum Mainnet selected.</strong> Public balance lookups and payment checks. Sending requires a separate review and confirmation.</p></div>
+    <section class="panel send-panel" aria-labelledby="send-title">
+      <div class="panel-header"><div class="section-icon" aria-hidden="true">↗</div><div><p class="eyebrow">SEND / CONNECTED WALLET</p><h2 id="send-title">Send a payment.</h2></div></div>
+      <p class="panel-intro">Enter a receiver and amount. Review the network and maximum cost before you confirm.</p>
+      <div class="send-sender"><span>Sending account</span><strong id="send-account">No wallet connected</strong><span id="send-network-label">Ethereum Mainnet</span><span id="send-limit"></span><span id="send-balance"></span></div>
+      <p id="send-help" class="field-help">Connect a browser wallet or open this site in your mobile wallet’s browser.</p>
+      <div class="wallet-connect-controls"><div class="wallet-choice"><label for="wallet-select">Wallet</label><select id="wallet-select" aria-label="Choose a wallet"><option value="">No browser wallet detected</option></select></div><button id="wallet-connect-button" class="button primary" type="button">Connect wallet</button><button id="wallet-disconnect-button" class="button secondary" type="button" hidden>Disconnect</button><button id="wallet-switch-button" class="button secondary" type="button" hidden>Switch wallet network</button></div><p class="field-help">Your wallet keeps your private key. This site never asks you to enter a private key or seed phrase.</p>
+      <form id="send-form" class="send-form" novalidate>
+        <div class="field"><label for="send-recipient">Receiver account address</label><input id="send-recipient" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="0x…" aria-describedby="send-help" disabled></div>
+        <div class="field"><label for="send-amount">Amount to send (<span data-asset-unit>ETH</span>)</label><div class="amount-input"><input id="send-amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.001" aria-describedby="send-amount-help" disabled><span aria-hidden="true" data-asset-unit>ETH</span></div><p id="send-amount-help" class="field-help">Gas fees are paid separately in ETH. Up to 18 decimal places.</p></div>
+        <button id="send-review-button" type="submit" class="button primary" disabled>Review transfer <span aria-hidden="true">→</span></button>
+      </form>
+      <div id="send-review" class="send-review" tabindex="-1" aria-labelledby="send-review-title" hidden><h3 id="send-review-title">Review this transfer</h3><dl id="send-review-details" class="result-details"></dl><p id="send-review-note"></p><div class="send-actions"><button id="send-cancel-button" type="button" class="button secondary">Cancel review</button><button id="send-confirm-button" type="button" class="button primary" disabled>Confirm &amp; send</button></div></div>
+      <div id="send-feedback" class="result" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="send-recovery-fields" class="field" hidden><label for="send-recovery-hash">Transaction hash from your wallet</label><input id="send-recovery-hash" type="text" spellcheck="false" autocomplete="off" placeholder="0x… transaction hash"><p class="field-help">Use this if the wallet response was lost, or you sped up or cancelled a transaction in your wallet.</p></div>
+      <div class="send-actions"><button id="send-recover-button" type="button" class="button secondary" hidden>Check submission status</button><button id="send-check-button" type="button" class="button secondary" hidden>Check receipt</button><button id="send-use-button" type="button" class="button secondary" hidden>Use in payment checker</button></div>
+      <p class="history-scope">You control the connected account. Each payment requires your wallet approval. Mainnet uses real funds; test on Sepolia first.</p>
+    </section>
+    <div class="workspace">
+      <section class="panel payment-panel" aria-labelledby="payment-title">
+        <div class="panel-header"><div class="section-icon" aria-hidden="true">✓</div><div><p class="eyebrow">01 / PAYMENT CHECK</p><h2 id="payment-title">Did the right payment arrive?</h2></div></div>
+        <p class="panel-intro">Match a transaction to the wallet and amount you expected.</p>
+        <div id="demo-controls" class="demo-controls" hidden><label for="scenario">Try a demo scenario <span>FICTIONAL</span></label><select id="scenario"></select><p>Choose an example, then verify it below. Scenarios are separate from the wallet snapshot.</p></div>
+        <form id="payment-form" novalidate>
+          <div class="field"><label for="recipient">Receiving wallet address</label><input id="recipient" name="recipient" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="0x…" aria-describedby="recipient-help"><p id="recipient-help" class="field-help">The public address that should receive the payment.</p></div>
+          <div class="field"><label for="expected">Expected amount <span class="label-unit" data-asset-unit>ETH</span></label><div class="amount-input"><input id="expected" name="expected" type="text" inputmode="decimal" autocomplete="off" placeholder="0.5" aria-describedby="amount-help"><span aria-hidden="true" data-asset-unit>ETH</span></div><p id="amount-help" class="field-help">Up to 18 decimal places. Gas fees are separate.</p></div>
+          <div class="field" id="expected-sender-field" hidden><label for="expected-sender">Expected sending wallet (optional)</label><input id="expected-sender" type="text" spellcheck="false" autocomplete="off" placeholder="0x..."><p class="field-help">When supplied, the signer and USDC event must match this address.</p></div>
+          <div class="field"><label for="tx-hash">Transaction hash</label><input id="tx-hash" name="hash" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="0x… (64 hexadecimal characters)" aria-describedby="hash-help"><p id="hash-help" class="field-help">Find this on the sender’s transaction receipt.</p></div>
+          <button id="verify-button" class="button primary" type="submit"><span>Verify payment</span><span aria-hidden="true">↗</span></button>
+        </form>
+        <div id="payment-result" class="result" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div class="scope-note"><span aria-hidden="true">ⓘ</span><p><span id="verification-scope">Plain direct ETH transfers are supported. USDC mode verifies direct token transfers and their receipt events.</span></p></div>
+      </section>
+      <section class="panel wallet-panel" aria-labelledby="wallet-title">
+        <div class="panel-header"><div class="section-icon" aria-hidden="true">≋</div><div><p class="eyebrow">02 / WALLET ACTIVITY</p><h2 id="wallet-title">See the bigger picture.</h2></div></div>
+        <p class="panel-intro">A real balance and the latest 20 transactions for the selected asset.</p>
+        <form id="wallet-form" novalidate><div class="field"><label for="wallet-address">Public wallet address</label><input id="wallet-address" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="0x…" aria-describedby="wallet-help"><p id="wallet-help" class="field-help">Look up any public address. A wallet connection is only needed to send.</p></div><button id="wallet-button" class="button secondary" type="submit">Look up wallet <span aria-hidden="true">→</span></button></form>
+        <div id="wallet-error" role="status" aria-live="polite"></div>
+        <div class="balance-card"><div class="balance-top"><span>WALLET BALANCE</span><span id="balance-source">LIVE RPC</span></div><div id="balance-result" role="status" aria-live="polite"></div><span class="balance-network"><span class="dot"></span><span id="balance-network-name">Ethereum Mainnet · real ETH</span></span></div>
+        <div class="history-heading"><h3>Recent transactions</h3><span id="history-count" class="count">0</span></div>
+        <div id="history-result" role="status" aria-live="polite"></div>
+        <p class="history-scope"><span id="history-scope">ETH shows normal transactions. USDC shows indexed token transfers for the configured contract. Indexing may lag; verify a receipt to prove payment.</span></p>
+      </section>
+    </div>
+    <aside class="trust-note"><span class="trust-icon" aria-hidden="true">◇</span><div><strong>A useful check. A snapshot in time.</strong><p>A successful mined match can still change after a chain reorganization. This tool does not claim finality or verify the sender’s real-world identity. Check your invoice records too.</p></div></aside>
+    <footer><span class="footer-brand">EtherReceipt <span>/</span> Built to make Ethereum make sense.</span><span>Review before sending · Never enter a seed phrase or private key on this page.</span></footer>
+  </main>
+  <noscript><p class="noscript">Enable JavaScript to use EtherReceipt’s live Ethereum network lookups.</p></noscript>
+</body>
+</html>

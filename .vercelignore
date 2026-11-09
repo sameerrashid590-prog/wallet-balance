@@ -1,0 +1,13 @@
+.env*
+data/
+artifacts/
+test/
+node_modules/
+.git/
+.vscode/
+.agents/
+.codex/
+.aws/
+lib/sender.js
+lib/journal.js
+lib/auth.js
