@@ -18,6 +18,13 @@
     "build": "node scripts/build.js"
   },
   "dependencies": {
+    "@metamask/connect-evm": "2.1.1",
     "ethers": "6.17.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
   }
 }

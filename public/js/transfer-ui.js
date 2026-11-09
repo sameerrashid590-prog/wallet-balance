@@ -4,6 +4,7 @@ import { getNetwork } from './networks.js';
 import { hashInput, verifyPayment } from './verification.js';
 import { verifyUsdcPayment } from './usdc-verification.js';
 import { liveBalance, livePayment } from './api.js';
+import { metamaskBrowserUrl } from './metamask-connector.js';
 import { createWalletSession, walletError, rejectedByUser } from './wallet-session.js';
 import { prepareWalletTransfer, sendWalletTransfer, matchesSubmissionTransaction } from './wallet-transfer.js';
 import { createTransferStore } from './transfer-store.js';
@@ -11,6 +12,9 @@ const terminal = state => ['success', 'failed', 'replaced', 'rejected'].includes
 const node = (tag, text, className) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (className) element.className = className; return element; };
 export function initializeTransfers({ context, useTransfer, onConfirmed = () => {}, readPayment = livePayment, readBalance = liveBalance, sessionFactory = createWalletSession, prepare = prepareWalletTransfer, send = sendWalletTransfer, store = createTransferStore(), locks = globalThis.navigator?.locks } = {}) {
   const $ = id => document.getElementById(id);
+  const openInMetaMask = metamaskBrowserUrl();
+  if (openInMetaMask) { $('wallet-open-metamask').href = openInMetaMask; $('wallet-open-metamask').rel = 'noopener noreferrer'; }
+  let connectionAttempt = 0;
   let session, wallet = { address: null, chainId: null, generation: 0 }, review = null, active = null;
   let version = 0, connecting = false, preparing = false, submitting = false, checking = false, disposed = false, receiptTimer = null, storageError = '';
   function message(title, text, tone = '') { const box = $('send-feedback'); box.className = 'result ' + tone; box.replaceChildren(node('h3', title), node('p', text)); }
@@ -38,13 +42,15 @@ export function initializeTransfers({ context, useTransfer, onConfirmed = () => 
     $('send-amount').disabled = !ready || submitting || unresolved;
     $('wallet-connect-button').disabled = busy || selected.mode !== 'live';
     $('wallet-connect-button').textContent = connecting ? 'Connecting…' : wallet.address ? 'Change wallet' : 'Connect wallet';
+    $('wallet-cancel-connect-button').hidden = !connecting;
+    $('wallet-open-metamask').hidden = !openInMetaMask || !!wallet.address || selected.mode !== 'live' || submitting;
     $('wallet-disconnect-button').hidden = !wallet.address;
     $('wallet-disconnect-button').disabled = busy;
     $('wallet-select').disabled = busy || selected.mode !== 'live';
     $('wallet-switch-button').hidden = !wallet.address || matched || selected.mode !== 'live';
     $('wallet-switch-button').disabled = busy;
     $('wallet-switch-button').textContent = 'Switch to ' + network.name;
-    $('send-help').textContent = selected.mode !== 'live' ? 'Select Live to connect a wallet and send a payment.' : storageError || (!wallet.address ? 'Connect a browser wallet, or open this page in your mobile wallet’s browser. Approve requests only in your wallet.' : !matched ? 'Your wallet is on a different network. Switch it to ' + network.name + '.' : !supported ? 'Native USDC is supported on Mainnet and Sepolia.' : 'The connected wallet signs your transfer. Gas is paid separately in ETH.');
+    $('send-help').textContent = selected.mode !== 'live' ? 'Select Live to connect a wallet and send a payment.' : storageError || (!wallet.address ? 'Choose your browser wallet, or MetaMask app / QR to connect the mobile app. Approve there, then return to this page.' : !matched ? 'Your wallet is on a different network. Switch it to ' + network.name + '.' : !supported ? 'Native USDC is supported on Mainnet and Sepolia.' : 'The connected wallet signs your transfer. Gas is paid separately in ETH.');
   }
   function scheduleReceipt(delay = 5000) { clearTimeout(receiptTimer); if (!disposed && active && !terminal(active.state)) { receiptTimer = setTimeout(() => checkReceipt(), delay); receiptTimer?.unref?.(); } }
   function showSubmission(record, result) {
@@ -82,7 +88,11 @@ export function initializeTransfers({ context, useTransfer, onConfirmed = () => 
     for (const radio of document.querySelectorAll('input[name="mode"]')) radio.disabled = locked;
     $('send-cancel-button').disabled = locked;
   }
-  session = sessionFactory({ onChange(next) { wallet = next; invalidate(); syncPending(); refreshBalance(); }, onWallets(wallets) {
+  session = sessionFactory({ onConnectionStatus(status) {
+    if (!connecting || disposed) return;
+    if (status === 'loading') message('Preparing MetaMask connection…', 'Loading the secure mobile connection. Your private key stays in MetaMask.');
+    if (status === 'waiting') message('Approve the connection in MetaMask', 'On your phone, open MetaMask and approve the connection, then return to this browser. On desktop, scan the displayed QR code with MetaMask.');
+  }, onChange(next) { wallet = next; invalidate(); syncPending(); refreshBalance(); }, onWallets(wallets) {
     const select = $('wallet-select'), chosen = select.value;
     select.replaceChildren(...wallets.map(wallet => { const option = node('option', wallet.name); option.value = wallet.id; return option; }));
     if (!wallets.length) { const option = node('option', 'No browser wallet detected'); option.value = ''; select.append(option); }
@@ -91,12 +101,22 @@ export function initializeTransfers({ context, useTransfer, onConfirmed = () => 
   wallet = session.snapshot();
   $('wallet-connect-button').addEventListener('click', async () => {
     if (connecting || submitting) return;
+    const attempt = ++connectionAttempt;
     connecting = true; invalidate();
-    try { await session.connect($('wallet-select').value || undefined); message('Wallet connected', 'Choose the network, receiver and amount, then review your payment.', 'success'); syncPending(); }
-    catch (e) { message('Could not connect wallet', walletError(e), 'warning'); }
-    finally { connecting = false; render(); }
+    message('Connect in your wallet', 'Approve the connection request in your wallet. If MetaMask opens on your phone, approve there and return to this browser.');
+    try {
+      await session.connect($('wallet-select').value || undefined, true, context().networkKey);
+      if (attempt !== connectionAttempt || disposed) return;
+      message('Wallet connected', 'Choose the network, receiver and amount, then review your payment.', 'success'); syncPending();
+    } catch (e) { if (attempt === connectionAttempt && !disposed) message('Could not connect wallet', walletError(e), 'warning'); }
+    finally { if (attempt === connectionAttempt) { connecting = false; render(); } }
   });
-  $('wallet-disconnect-button').addEventListener('click', () => { if (submitting) return; session.disconnect(); active = null; clearTimeout(receiptTimer); for (const id of ['send-check-button', 'send-use-button', 'send-recover-button', 'send-recovery-fields']) $(id).hidden = true; message('Wallet disconnected', 'Saved public transaction details stay in this browser for recovery.'); render(); });
+  $('wallet-cancel-connect-button').addEventListener('click', () => {
+    if (!connecting || submitting) return;
+    connectionAttempt++; connecting = false; session.cancelConnection?.();
+    message('Connection cancelled', 'You can connect again. If a request is still open in MetaMask, reject or close it there.'); render();
+  });
+  $('wallet-disconnect-button').addEventListener('click', () => { if (submitting) return; void Promise.resolve(session.disconnect()).catch(() => {}); active = null; clearTimeout(receiptTimer); for (const id of ['send-check-button', 'send-use-button', 'send-recover-button', 'send-recovery-fields']) $(id).hidden = true; message('Wallet disconnected', 'Saved public transaction details stay in this browser for recovery.'); render(); });
   $('wallet-switch-button').addEventListener('click', async () => {
     if (connecting || submitting) return;
     connecting = true; invalidate();
@@ -183,6 +203,9 @@ export function initializeTransfers({ context, useTransfer, onConfirmed = () => 
   $('send-use-button').addEventListener('click', () => { if (active?.hash && !submitting) useTransfer(active); });
   for (const id of ['send-check-button', 'send-use-button', 'send-recover-button', 'send-recovery-fields']) $(id).hidden = true;
   message('Connect your wallet to send', 'Signing and approval happen in your wallet. Public balance and payment checks work without connecting.'); render();
+  const refreshAfterReturn = () => { if (!connecting && !submitting && !disposed) void session.refresh?.().catch(() => {}); };
+  globalThis.window?.addEventListener('focus', refreshAfterReturn);
+  globalThis.window?.addEventListener('pageshow', refreshAfterReturn);
   session.restore().then(() => { if (!disposed) { wallet = session.snapshot(); render(); syncPending(); refreshBalance(); } }).catch(() => {});
-  return { contextChanged() { invalidate(); syncPending(); refreshBalance(); }, dispose() { disposed = true; clearTimeout(receiptTimer); session.dispose(); }, isSubmitting: () => submitting };
+  return { contextChanged() { invalidate(); syncPending(); refreshBalance(); }, dispose() { disposed = true; connectionAttempt++; clearTimeout(receiptTimer); globalThis.window?.removeEventListener('focus', refreshAfterReturn); globalThis.window?.removeEventListener('pageshow', refreshAfterReturn); session.dispose(); }, isSubmitting: () => submitting };
 }

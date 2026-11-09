@@ -41,7 +41,7 @@ test('EIP-6963 discovers separate wallets and connects only the selected provide
   const f = fixture(); let alternateCalls = 0;
   const provider = { async request({ method }) { alternateCalls++; return method === 'eth_chainId' ? '0x1' : [OTHER]; } };
   const event = new Event('eip6963:announceProvider'); event.detail = { info: { uuid: 'wallet-2', rdns: 'org.example.wallet', name: '<script>wallet</script>' }, provider }; f.target.dispatchEvent(event);
-  assert.equal(f.session.wallets().length, 2);
+  assert.equal(f.session.wallets().length, 3);
   await f.session.connect('org.example.wallet'); assert.equal(f.session.snapshot().address, OTHER); assert.equal(f.calls.length, 0); assert.equal(alternateCalls, 2); f.session.dispose();
 });
 test('network switching uses only pinned chains and adds a missing chain before switching', async () => {

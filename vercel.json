@@ -22,7 +22,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'sha256-R1hOITRLQICSQQLlwK1xk8WvS3fzu6CoTh0FQo7n6n4='; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self' 'sha256-R1hOITRLQICSQQLlwK1xk8WvS3fzu6CoTh0FQo7n6n4='; style-src 'self'; img-src 'self' data:; connect-src 'self' wss://mm-sdk-relay.api.cx.metamask.io https://mm-sdk-relay.api.cx.metamask.io https://ethereum-rpc.publicnode.com https://ethereum-sepolia-rpc.publicnode.com https://ethereum-hoodi-rpc.publicnode.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         },
         {
           "key": "Permissions-Policy",

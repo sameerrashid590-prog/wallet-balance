@@ -1,8 +1,10 @@
 import { getAddress, toQuantity } from 'ethers';
 import { getNetwork } from './networks.js';
+import { createMetaMaskConnector, METAMASK_CONNECT_ID } from './metamask-connector.js';
 
 const RPC = Object.freeze({ mainnet: 'https://ethereum-rpc.publicnode.com', sepolia: 'https://ethereum-sepolia-rpc.publicnode.com', hoodi: 'https://ethereum-hoodi-rpc.publicnode.com' });
 export function walletError(error) {
+  if (error?.name === 'AbortError') return 'Wallet connection cancelled. You can connect again when ready.';
   const code = Number(error?.code ?? error?.info?.error?.code ?? error?.error?.code);
   if (code === 4001) return 'You declined the request in your wallet. Nothing was submitted by this request.';
   if (code === -32002) return 'A wallet request is already open. Open your wallet to finish or reject it.';
@@ -14,11 +16,13 @@ export const rejectedByUser = error => Number(error?.code ?? error?.info?.error?
 
 // EIP-6963 discovery + EIP-1193 requests. This module receives public accounts
 // only. Account keys and signing stay inside the visitor's wallet.
-export function createWalletSession({ target = globalThis.window, ethereum = () => globalThis.ethereum, storage, onChange = () => {}, onWallets = () => {} } = {}) {
+export function createWalletSession({ target = globalThis.window, ethereum = () => globalThis.ethereum, storage, mobileFactory = createMetaMaskConnector, onChange = () => {}, onWallets = () => {}, onConnectionStatus = () => {} } = {}) {
   if (storage === undefined) { try { storage = globalThis.sessionStorage; } catch { storage = null; } }
   const wallets = new Map();
   let selected = null, address = null, chainId = null, generation = 0, disposed = false;
   let listeners = [];
+  let pendingWallet = null, pendingAttempt = 0;
+  const mobile = target ? mobileFactory({ onStatus: onConnectionStatus }) : null;
   const snapshot = () => ({ address, chainId, walletId: selected?.id ?? null, walletName: selected?.name ?? null, generation });
   function remember(id) { try { if (id) storage?.setItem('etherreceipt-wallet', id); else storage?.removeItem('etherreceipt-wallet'); } catch {} }
   function notify() { generation++; if (!disposed) onChange(snapshot()); }
@@ -56,22 +60,34 @@ export function createWalletSession({ target = globalThis.window, ethereum = () 
       wallet.provider.on?.(event, handler); listeners.push([wallet.provider, event, handler]);
     }
   }
-  async function connect(id, prompt = true) {
+  async function connect(id, prompt = true, networkKey = 'mainnet') {
     discover();
     const wallet = wallets.get(id) || (!id ? wallets.values().next().value : null);
     if (!wallet) throw new Error('No compatible wallet found. Enable a browser wallet, or open this site in your mobile wallet’s browser.');
     const attempt = ++generation;
-    const accounts = await wallet.provider.request({ method: prompt ? 'eth_requestAccounts' : 'eth_accounts' });
-    if (disposed || generation !== attempt) throw new Error('Wallet connection changed. Connect again.');
-    if (!Array.isArray(accounts) || !accounts[0]) throw new Error('No wallet account was connected.');
-    const nextAddress = getAddress(accounts[0]);
-    const nextChain = Number(BigInt(await wallet.provider.request({ method: 'eth_chainId' })));
-    if (disposed || generation !== attempt) throw new Error('Wallet connection changed. Connect again.');
-    attach(wallet); address = nextAddress; chainId = nextChain; remember(wallet.id); notify();
-    return snapshot();
+    const previous = selected;
+    detach(); pendingWallet = wallet; pendingAttempt = attempt;
+    try {
+      const accounts = wallet.mobile ? await mobile.connect(networkKey, prompt) : await wallet.provider.request({ method: prompt ? 'eth_requestAccounts' : 'eth_accounts' });
+      if (disposed || generation !== attempt) throw new DOMException('Wallet connection cancelled or changed.', 'AbortError');
+      if (!Array.isArray(accounts) || !accounts[0]) throw new Error('No wallet account was connected.');
+      const nextAddress = getAddress(accounts[0]);
+      const nextChain = Number(BigInt(await wallet.provider.request({ method: 'eth_chainId' })));
+      if (disposed || generation !== attempt) throw new DOMException('Wallet connection cancelled or changed.', 'AbortError');
+      attach(wallet); address = nextAddress; chainId = nextChain; remember(wallet.id); notify();
+      return snapshot();
+    } catch (error) {
+      if (!disposed && generation === attempt && previous) attach(previous);
+      throw error;
+    } finally { if (pendingAttempt === attempt) { pendingWallet = null; pendingAttempt = 0; } }
   }
+
   target?.addEventListener('eip6963:announceProvider', announce);
   discover();
+  if (mobile) {
+    wallets.set(METAMASK_CONNECT_ID, { id: METAMASK_CONNECT_ID, name: 'MetaMask app / QR', provider: mobile.provider, mobile: true });
+    onWallets([...wallets.values()].map(({ id, name }) => ({ id, name })));
+  }
   return {
     snapshot,
     wallets: () => [...wallets.values()].map(({ id, name }) => ({ id, name })),
@@ -99,7 +115,18 @@ export function createWalletSession({ target = globalThis.window, ethereum = () 
       if (chainId !== network.chainId) throw new Error('The wallet did not switch to ' + network.name + '.');
       return snapshot();
     },
-    disconnect() { detach(); selected = null; address = null; chainId = null; remember(null); notify(); },
-    dispose() { disposed = true; detach(); target?.removeEventListener('eip6963:announceProvider', announce); },
+    async refresh() {
+      if (!selected || pendingWallet) return snapshot();
+      const attempt = generation, provider = selected.provider;
+      const [accounts, actualChain] = await Promise.all([provider.request({ method: 'eth_accounts' }), provider.request({ method: 'eth_chainId' })]);
+      if (attempt !== generation || disposed) return snapshot();
+      const nextAddress = accounts?.[0] ? getAddress(accounts[0]) : null;
+      const nextChain = Number(BigInt(actualChain));
+      if (nextAddress !== address || nextChain !== chainId) { address = nextAddress; chainId = nextChain; if (!address) remember(null); notify(); }
+      return snapshot();
+    },
+    cancelConnection() { generation++; if (pendingWallet?.mobile) mobile.cancel(); pendingWallet = null; pendingAttempt = 0; if (selected) attach(selected); },
+    disconnect() { const remote = selected?.mobile || pendingWallet?.mobile; this.cancelConnection(); detach(); selected = null; address = null; chainId = null; remember(null); notify(); if (remote) return mobile.disconnect(); return Promise.resolve(); },
+    dispose() { disposed = true; generation++; detach(); mobile?.dispose(); target?.removeEventListener('eip6963:announceProvider', announce); },
   };
 }

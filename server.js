@@ -8,7 +8,9 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const assets = new Map([
   ['/', ['public/index.html', 'text/html']],
   ['/styles.css', ['public/styles.css', 'text/css']],
-  ...['app', 'api', 'verification', 'demo', 'networks', 'transfer-input', 'transfer-ui', 'assets', 'usdc-abi', 'usdc-verification', 'usdc-contracts', 'wallet-session', 'wallet-transfer', 'transfer-store'].map(name => ['/js/' + name + '.js', ['public/js/' + name + '.js', 'text/javascript']]),
+  ...['app', 'api', 'verification', 'demo', 'networks', 'transfer-input', 'transfer-ui', 'assets', 'usdc-abi', 'usdc-verification', 'usdc-contracts', 'wallet-session', 'wallet-transfer', 'transfer-store', 'metamask-connector'].map(name => ['/js/' + name + '.js', ['public/js/' + name + '.js', 'text/javascript']]),
+  ['/wallet-icon.svg', ['public/wallet-icon.svg', 'image/svg+xml']],
+  ['/vendor/metamask-connect.js', ['public/vendor/metamask-connect.js', 'text/javascript']],
   ['/vendor/ethers.js', ['node_modules/ethers/dist/ethers.min.js', 'text/javascript']],
 ]);
 export function createApp(options = {}) {

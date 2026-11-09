@@ -22,13 +22,14 @@ Open http://localhost:3000. The optional local .env is used for RPC configuratio
 3. Deploy. No environment variables are required for the default public RPC endpoints.
 4. Optionally configure MAINNET_RPC_URL, SEPOLIA_RPC_URL, HOODI_RPC_URL, BLOCKSCOUT_API_KEY and REQUEST_TIMEOUT_MS in Vercel's environment settings to use your own read providers. These settings stay server-side. Redeploy after changing them.
 
-Do not upload the local .env or configure a wallet private key or signing password in Vercel. .vercelignore excludes local environment files, historical data, artifacts and retired server-signer modules. Only the public assets and read-only API dependency graph are needed. The build copies the installed ethers browser bundle into public/vendor; it never copies configuration or wallet history.
+Do not upload the local .env or configure a wallet private key or signing password in Vercel. .vercelignore excludes local environment files, historical data, artifacts and retired server-signer modules. Only the public assets and read-only API dependency graph are needed. The build copies ethers and bundles the official MetaMask connector locally into public/vendor using esbuild; it never copies configuration or wallet history. No new Vercel environment variable or wallet secret is required for mobile pairing.
 
 Vercel runs the handlers in api/ as Node functions. It does not start server.js or require a writable disk/database. See [Vercel Node functions](https://vercel.com/docs/functions/runtimes/node-js) and [project configuration](https://vercel.com/docs/project-configuration).
 
 ## Connect and send
 
-- Connect an installed EIP-1193/EIP-6963 browser wallet, such as MetaMask, Rabby or Coinbase Wallet. Multiple announced wallets appear in the wallet selector. On a phone, open the site inside a compatible mobile wallet's browser. External QR/WalletConnect sessions are not included in this version.
+- Connect an installed EIP-1193/EIP-6963 browser wallet, such as MetaMask, Rabby or Coinbase Wallet. Multiple announced wallets appear in the wallet selector. In mobile Chrome or Safari, choose **MetaMask app / QR**, approve the connection in the MetaMask app, and return to the browser. The official @metamask/connect-evm connector maintains the paired session; no injected wallet is required. Desktop users without an extension can scan its QR code. Generic WalletConnect providers are not included.
+- For mobile app pairing, keep the browser tab open, approve in MetaMask, then switch back to the browser. **Cancel connection** releases a stalled pairing attempt and ignores late approval. If pairing is unavailable on the device, **Open site in MetaMask** opens this deployed HTTPS site in MetaMask's own browser. A phone cannot reach a development server at the computer's localhost address.
 - Choose the network explicitly. If the wallet is on another chain, use **Switch to ...** and approve that switch in the wallet.
 - Enter the receiver and amount, then review the sender, network, asset, nonce and maximum ETH fee. This only reads blockchain data.
 - Click **Approve ... in wallet**. The app rechecks the account, chain, balances, pending nonce and fee cap before requesting eth_sendTransaction. The wallet shows the transaction and owns all signing. The site never asks for a separate message signature or token approval.
@@ -39,7 +40,7 @@ Mainnet (1), Sepolia (11155111) and Hoodi (560048) are available for ETH. Native
 
 ## Pending payments and recovery
 
-Only public recovery data (address, nonce, network, reviewed transaction and returned hash) is stored in this browser's localStorage. Pending records are isolated by sending address and chain; one visitor cannot block another visitor. Connection restoration uses eth_accounts without prompting for permissions again. Public lookups need no connection.
+Our transfer recovery records in localStorage contain public data only (address, nonce, network, reviewed transaction and returned hash). MetaMask Connect separately manages its paired connection session in browser storage; account private keys stay inside MetaMask. Pending records are isolated by sending address and chain; one visitor cannot block another visitor. Injected-wallet restoration uses eth_accounts; MetaMask app restoration reads the connector's existing permitted accounts without a new approval prompt. Public lookups need no connection.
 
 If a wallet response is lost or the tab closes before a hash returns, connect the same wallet and chain again. Copy the **transaction hash** from the wallet's activity into the recovery field. This is a public hash, not a credential. The app verifies the sender, chain and nonce before accepting it. Same-nonce speed-ups and cancellations can be recovered too; a different payment is labeled as a replacement rather than the intended payment.
 
@@ -54,5 +55,9 @@ Requests have bounded payload sizes/timeouts, security headers, same-origin chec
 ## Verification
 
 npm run check runs syntax and automated tests. npm run build prepares the deployment assets. scripts/browser-smoke.js exercises a simulated browser wallet and mocked blockchain responses, including exact USDC receipt proof, with no real keys, signing or broadcasts. It accepts optional Playwright module and Chrome executable paths when those tools are installed outside this project.
+
+scripts/mobile-wallet-smoke.js additionally checks the real SDK's session-bearing mobile link under the site's CSP, plus a simulated mobile approval, passive restoration and cancellation with no injected provider. A physical-phone MetaMask approval is not automated by these checks.
+
+The MetaMask dependency's UUID helper is pinned to patched uuid 11.1.1 through package overrides; the adapter uses the supported v4 API.
 
 A funded real-wallet transfer remains a user action. Prefer Sepolia when checking a new deployment.
